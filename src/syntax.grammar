@@ -18,9 +18,17 @@ item {
   ApplyYearDirective |
   ApplyTagDirective |
   ApplyFixedDirective |
+  AssertDirective |
+  CaptureDirective |
+  CheckDirective |
+  DefineDirective |
+  ExprDirective |
+  ValueDirective |
+  EvalDirective |
   CommodityConversionDirective |
   BucketDirective |
   IgnoredPriceDirective |
+  CommandFlagDirective |
   EndDirective |
   BlockComment |
   LineComment |
@@ -55,78 +63,120 @@ AutoHeader {
 }
 
 AccountDirective {
-  AccountKeyword DirectiveAccountName Newline
-  indentedLine*
+  AccountKeyword DirectiveAccountName InlineComment? Newline
+  IndentedComment*
 }
 
 CommodityDirective {
-  CommodityKeyword DirectiveArgument Newline
-  indentedLine*
+  CommodityKeyword DirectiveArgument InlineComment? Newline
+  commodityIndentedLine*
 }
 
 IncludeDirective {
-  IncludeKeyword IncludePath Newline
+  IncludeKeyword IncludePath InlineComment? Newline
 }
 
 AliasDirective {
-  AliasKeyword DirectiveArgument Newline
+  AliasKeyword DirectiveArgument InlineComment? Newline
 }
 
 PayeeDirective {
-  PayeeKeyword DirectiveArgument Newline
+  PayeeKeyword DirectiveArgument InlineComment? Newline
+  IndentedComment*
 }
 
 TagDirective {
-  TagKeyword DirectiveArgument Newline
-  indentedLine*
+  TagKeyword DirectiveArgument InlineComment? Newline
+  IndentedComment*
 }
 
 PriceDirective {
-  PriceKeyword DirectiveArgument Newline
+  PriceKeyword DirectiveArgument InlineComment? Newline
 }
 
 DefaultCommodityDirective {
-  DefaultCommodityKeyword DirectiveArgument Newline
+  DefaultCommodityKeyword DirectiveArgument InlineComment? Newline
 }
 
 YearDirective {
-  YearKeyword DirectiveArgument Newline
+  YearKeyword DirectiveArgument InlineComment? Newline
 }
 
 DecimalMarkDirective {
-  DecimalMarkKeyword DirectiveArgument Newline
+  DecimalMarkKeyword DirectiveArgument InlineComment? Newline
 }
 
 ApplyAccountDirective {
-  ApplyAccountKeyword DirectiveArgument Newline
+  ApplyAccountKeyword DirectiveArgument InlineComment? Newline
 }
 
 ApplyYearDirective {
-  ApplyYearKeyword DirectiveArgument Newline
+  ApplyYearKeyword DirectiveArgument InlineComment? Newline
 }
 
 ApplyTagDirective {
-  ApplyTagKeyword DirectiveArgument Newline
+  ApplyTagKeyword DirectiveArgument InlineComment? Newline
 }
 
 ApplyFixedDirective {
-  ApplyFixedKeyword DirectiveArgument Newline
+  ApplyFixedKeyword DirectiveArgument InlineComment? Newline
+}
+
+AssertDirective {
+  AssertKeyword DirectiveRest? Newline
+}
+
+CaptureDirective {
+  CaptureKeyword DirectiveRest? Newline
+}
+
+CheckDirective {
+  CheckKeyword DirectiveRest? Newline
+}
+
+DefineDirective {
+  DefineKeyword DirectiveRest? Newline
+}
+
+ExprDirective {
+  ExprKeyword DirectiveRest? Newline
+}
+
+ValueDirective {
+  ValueKeyword DirectiveRest? Newline
+}
+
+EvalDirective {
+  EvalKeyword DirectiveRest? Newline
 }
 
 CommodityConversionDirective {
-  CommodityConversionKeyword DirectiveArgument Newline
+  CommodityConversionKeyword DirectiveArgument InlineComment? Newline
 }
 
 BucketDirective {
-  BucketKeyword DirectiveArgument Newline
+  BucketKeyword DirectiveArgument InlineComment? Newline
 }
 
 IgnoredPriceDirective {
-  IgnoredPriceKeyword DirectiveArgument Newline
+  IgnoredPriceKeyword DirectiveArgument InlineComment? Newline
+}
+
+CommandFlagDirective {
+  CommandFlagKeyword DirectiveRest? Newline
 }
 
 EndDirective {
-  EndKeyword DirectiveArgument? Newline
+  EndKeyword DirectiveArgument? InlineComment? Newline
+}
+
+commodityIndentedLine {
+  CommodityFormatDirective |
+  IndentedComment
+}
+
+CommodityFormatDirective {
+  PostingIndent FormatKeyword DirectiveArgument InlineComment? Newline
 }
 
 indentedLine {
@@ -135,7 +185,14 @@ indentedLine {
 }
 
 Posting {
-  PostingIndent Status? AccountName Amount? CostAnnotation? BalanceAssertion? InlineComment? Newline
+  PostingIndent Status? AccountName Amount? PostingAnnotation* InlineComment? Newline
+}
+
+PostingAnnotation {
+  CostAnnotation |
+  BalanceAssertion |
+  LotPrice |
+  LotDate
 }
 
 Amount {
@@ -148,6 +205,14 @@ CostAnnotation {
 
 BalanceAssertion {
   BalanceOp Sign? Commodity? Sign? Number Commodity?
+}
+
+LotPrice {
+  ("{{" | "{") LotPriceFixed? Sign? Commodity? Sign? Number Commodity? ("}}" | "}")
+}
+
+LotDate {
+  "[" LotDateBody "]"
 }
 
 IndentedComment {
@@ -174,9 +239,17 @@ InlineComment { CommentMark CommentBody? }
   ApplyYearKeyword,
   ApplyTagKeyword,
   ApplyFixedKeyword,
+  AssertKeyword,
+  CaptureKeyword,
+  CheckKeyword,
+  DefineKeyword,
+  ExprKeyword,
+  ValueKeyword,
+  EvalKeyword,
   CommodityConversionKeyword,
   BucketKeyword,
   IgnoredPriceKeyword,
+  CommandFlagKeyword,
   EndKeyword,
   BlockComment,
   LineComment,
@@ -186,6 +259,7 @@ InlineComment { CommentMark CommentBody? }
 @external tokens directiveArgTokens from "./tokens" {
   DirectiveAccountName,
   DirectiveArgument,
+  DirectiveRest,
   IncludePath,
   TxnDescription,
   PeriodicExpression,
@@ -206,8 +280,14 @@ InlineComment { CommentMark CommentBody? }
   CommentBody
 }
 
+@external tokens lotDateToken from "./tokens" {
+  LotDateBody
+}
+
 @tokens {
   Status { "!" | "*" }
+
+  FormatKeyword { "format" }
 
   Number { @digit (@digit | $[,. ])* @digit | @digit }
 
@@ -220,6 +300,8 @@ InlineComment { CommentMark CommentBody? }
   CostOp { "@@" | "@" }
 
   BalanceOp { "==" "*"? | "=" "*"? }
+
+  LotPriceFixed { "=" }
 
   CommentMark { ";" }
 

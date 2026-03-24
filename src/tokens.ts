@@ -2,14 +2,16 @@ import {ExternalTokenizer, InputStream} from "@lezer/lr"
 import {
   TxnDate, PeriodicMark, AutoMark, BlockComment,
   LineComment, BlankLine, PostingIndent, CommentIndent, AccountName,
-  CommentBody, Newline,
+  CommentBody, Newline, LotDateBody,
   AccountKeyword, CommodityKeyword, IncludeKeyword, AliasKeyword,
   PayeeKeyword, TagKeyword, PriceKeyword, DefaultCommodityKeyword,
   YearKeyword, DecimalMarkKeyword, ApplyAccountKeyword,
   ApplyYearKeyword, ApplyTagKeyword, ApplyFixedKeyword,
+  AssertKeyword, CaptureKeyword, CheckKeyword, DefineKeyword,
+  ExprKeyword, ValueKeyword, EvalKeyword,
   CommodityConversionKeyword, BucketKeyword, IgnoredPriceKeyword,
-  EndKeyword,
-  DirectiveAccountName, DirectiveArgument, IncludePath, TxnDescription,
+  CommandFlagKeyword, EndKeyword,
+  DirectiveAccountName, DirectiveArgument, DirectiveRest, IncludePath, TxnDescription,
   PeriodicExpression, AutoQuery
 } from "./syntax.grammar.terms"
 
@@ -19,6 +21,7 @@ const CH_TAB = 9
 const CH_SEMI = 59
 const CH_HASH = 35
 const CH_STAR = 42
+const CH_AT = 64
 const CH_TILDE = 126
 const CH_EQUALS = 61
 
@@ -36,6 +39,35 @@ function skipToEOL(input: InputStream, offset: number): number {
     if (isEOL(ch)) return offset
     offset++
   }
+}
+
+function lastNonSpaceBeforeLineCommentOrEOL(input: InputStream, offset: number): number {
+  let i = offset
+  let lastNonSpace = -1
+  let inDoubleQuotes = false
+
+  while (!isEOL(input.peek(i))) {
+    let ch = input.peek(i)
+
+    if (ch === 34 /* " */) {
+      inDoubleQuotes = !inDoubleQuotes
+      lastNonSpace = i
+      i++
+      continue
+    }
+
+    if (!inDoubleQuotes && ch === CH_SEMI) {
+      break
+    }
+
+    if (ch !== CH_SPACE && ch !== CH_TAB) {
+      lastNonSpace = i
+    }
+
+    i++
+  }
+
+  return lastNonSpace
 }
 
 function matchDate(input: InputStream, offset: number): number {
@@ -103,6 +135,7 @@ const DIRECTIVE_MAP: Array<{kw: string, token: number}> = [
   {kw: "apply year", token: ApplyYearKeyword},
   {kw: "apply tag", token: ApplyTagKeyword},
   {kw: "apply fixed", token: ApplyFixedKeyword},
+  {kw: "assert", token: AssertKeyword},
   {kw: "end apply account", token: EndKeyword},
   {kw: "end apply year", token: EndKeyword},
   {kw: "end apply tag", token: EndKeyword},
@@ -113,12 +146,19 @@ const DIRECTIVE_MAP: Array<{kw: string, token: number}> = [
   {kw: "end", token: EndKeyword},
   {kw: "year", token: YearKeyword},
   {kw: "bucket", token: BucketKeyword},
+  {kw: "capture", token: CaptureKeyword},
+  {kw: "check", token: CheckKeyword},
+  {kw: "define", token: DefineKeyword},
+  {kw: "expr", token: ExprKeyword},
+  {kw: "value", token: ValueKeyword},
+  {kw: "eval", token: EvalKeyword},
 ]
 
 /// Header-level tokenizer: recognizes complete first lines of top-level entries.
-export const headerTokens = new ExternalTokenizer((input) => {
+export const headerTokens = new ExternalTokenizer((input, stack) => {
   if (!atLineStart(input)) return
 
+  let prefixLen = 0
   let ch = input.peek(0)
 
   if (ch === CH_NEWLINE) {
@@ -126,6 +166,34 @@ export const headerTokens = new ExternalTokenizer((input) => {
     return
   }
   if (ch < 0) return
+
+  if (ch === CH_SPACE || ch === CH_TAB) {
+    let i = 0
+    while (input.peek(i) === CH_SPACE || input.peek(i) === CH_TAB) i++
+    let next = input.peek(i)
+
+    if (next === CH_NEWLINE && stack.canShift(BlankLine)) {
+      input.acceptToken(BlankLine, i + 1)
+      return
+    }
+
+    if (
+      (next === CH_SEMI || next === CH_HASH || next === CH_STAR) &&
+      stack.canShift(LineComment) &&
+      !stack.canShift(CommentIndent) &&
+      !stack.canShift(PostingIndent)
+    ) {
+      let end = skipToEOL(input, i)
+      if (input.peek(end) === CH_NEWLINE) end++
+      input.acceptToken(LineComment, end)
+      return
+    }
+  }
+
+  if (ch === 33 /* ! */ || ch === CH_AT) {
+    prefixLen = 1
+    ch = input.peek(prefixLen)
+  }
 
   // Block comment
   if (matchKeyword(input, 0, "comment")) {
@@ -193,35 +261,40 @@ export const headerTokens = new ExternalTokenizer((input) => {
 
   // Single-letter directives: P (price), D (default commodity), Y (year),
   // C (commodity conversion), A (bucket), N (ignored price commodity)
-  if (ch === 80 /* P */ && (input.peek(1) === CH_SPACE || input.peek(1) === CH_TAB)) {
-    input.acceptToken(PriceKeyword, 1)
+  if (ch === 80 /* P */ && (input.peek(prefixLen + 1) === CH_SPACE || input.peek(prefixLen + 1) === CH_TAB)) {
+    input.acceptToken(PriceKeyword, prefixLen + 1)
     return
   }
-  if (ch === 68 /* D */ && (input.peek(1) === CH_SPACE || input.peek(1) === CH_TAB)) {
-    input.acceptToken(DefaultCommodityKeyword, 1)
+  if (ch === 68 /* D */ && (input.peek(prefixLen + 1) === CH_SPACE || input.peek(prefixLen + 1) === CH_TAB)) {
+    input.acceptToken(DefaultCommodityKeyword, prefixLen + 1)
     return
   }
-  if (ch === 89 /* Y */ && (input.peek(1) === CH_SPACE || input.peek(1) === CH_TAB)) {
-    input.acceptToken(YearKeyword, 1)
+  if (ch === 89 /* Y */ && (input.peek(prefixLen + 1) === CH_SPACE || input.peek(prefixLen + 1) === CH_TAB)) {
+    input.acceptToken(YearKeyword, prefixLen + 1)
     return
   }
-  if (ch === 67 /* C */ && (input.peek(1) === CH_SPACE || input.peek(1) === CH_TAB)) {
-    input.acceptToken(CommodityConversionKeyword, 1)
+  if (ch === 67 /* C */ && (input.peek(prefixLen + 1) === CH_SPACE || input.peek(prefixLen + 1) === CH_TAB)) {
+    input.acceptToken(CommodityConversionKeyword, prefixLen + 1)
     return
   }
-  if (ch === 65 /* A */ && (input.peek(1) === CH_SPACE || input.peek(1) === CH_TAB)) {
-    input.acceptToken(BucketKeyword, 1)
+  if (ch === 65 /* A */ && (input.peek(prefixLen + 1) === CH_SPACE || input.peek(prefixLen + 1) === CH_TAB)) {
+    input.acceptToken(BucketKeyword, prefixLen + 1)
     return
   }
-  if (ch === 78 /* N */ && (input.peek(1) === CH_SPACE || input.peek(1) === CH_TAB)) {
-    input.acceptToken(IgnoredPriceKeyword, 1)
+  if (ch === 78 /* N */ && (input.peek(prefixLen + 1) === CH_SPACE || input.peek(prefixLen + 1) === CH_TAB)) {
+    input.acceptToken(IgnoredPriceKeyword, prefixLen + 1)
+    return
+  }
+
+  if (ch === 45 /* - */ && input.peek(prefixLen + 1) === 45 /* - */) {
+    input.acceptToken(CommandFlagKeyword, prefixLen + 2)
     return
   }
 
   // Multi-word directive keywords
   for (let entry of DIRECTIVE_MAP) {
-    if (matchKeyword(input, 0, entry.kw)) {
-      input.acceptToken(entry.token, entry.kw.length)
+    if (matchKeyword(input, prefixLen, entry.kw)) {
+      input.acceptToken(entry.token, prefixLen + entry.kw.length)
       return
     }
   }
@@ -233,7 +306,7 @@ export const headerTokens = new ExternalTokenizer((input) => {
     input.acceptToken(LineComment, i)
     return
   }
-}, {contextual: false})
+}, {contextual: true})
 
 
 /// Directive argument tokenizers: consume the rest of the line after a directive keyword.
@@ -251,8 +324,6 @@ export const directiveArgTokens = new ExternalTokenizer((input, stack) => {
     let lastNonSpace = -1
     while (!isEOL(input.peek(end))) {
       let c = input.peek(end)
-      // Stop at double-space or semicolon (inline comment)
-      if (c === CH_SEMI) break
       if (c === CH_SPACE) {
         let j = end
         while (input.peek(j) === CH_SPACE) j++
@@ -270,14 +341,8 @@ export const directiveArgTokens = new ExternalTokenizer((input, stack) => {
   }
 
   if (stack.canShift(IncludePath)) {
-    // include directive: consume the path/glob to EOL
-    let end = 0
-    let lastNonSpace = -1
-    while (!isEOL(input.peek(end))) {
-      let c = input.peek(end)
-      if (c !== CH_SPACE && c !== CH_TAB) lastNonSpace = end
-      end++
-    }
+    // include directive: consume the path/glob to EOL, stopping before a same-line ; comment
+    let lastNonSpace = lastNonSpaceBeforeLineCommentOrEOL(input, 0)
     if (lastNonSpace >= 0) {
       input.acceptToken(IncludePath, lastNonSpace + 1)
     }
@@ -331,7 +396,15 @@ export const directiveArgTokens = new ExternalTokenizer((input, stack) => {
   }
 
   if (stack.canShift(DirectiveArgument)) {
-    // Generic directive argument: everything to EOL
+    // Generic directive argument: everything to EOL, stopping before an unquoted ; comment
+    let lastNonSpace = lastNonSpaceBeforeLineCommentOrEOL(input, 0)
+    if (lastNonSpace >= 0) {
+      input.acceptToken(DirectiveArgument, lastNonSpace + 1)
+    }
+    return
+  }
+
+  if (stack.canShift(DirectiveRest)) {
     let end = 0
     let lastNonSpace = -1
     while (!isEOL(input.peek(end))) {
@@ -340,7 +413,7 @@ export const directiveArgTokens = new ExternalTokenizer((input, stack) => {
       end++
     }
     if (lastNonSpace >= 0) {
-      input.acceptToken(DirectiveArgument, lastNonSpace + 1)
+      input.acceptToken(DirectiveRest, lastNonSpace + 1)
     }
     return
   }
@@ -385,7 +458,24 @@ export const commentBodyToken = new ExternalTokenizer((input, stack) => {
   }
 }, {contextual: true})
 
-/// Account name tokenizer: consumes chars until 2+ spaces, tab, semicolon, or EOL.
+export const lotDateToken = new ExternalTokenizer((input, stack) => {
+  if (!stack.canShift(LotDateBody)) return
+  let i = 0
+  let sawContent = false
+
+  while (true) {
+    let ch = input.peek(i)
+    if (ch < 0 || ch === CH_NEWLINE || ch === 93 /* ] */) break
+    sawContent = true
+    i++
+  }
+
+  if (sawContent) {
+    input.acceptToken(LotDateBody, i)
+  }
+}, {contextual: true})
+
+/// Account name tokenizer: consumes chars until 2+ spaces, tab, or EOL.
 /// Skips leading status markers (* or !) followed by space so the parser can
 /// match them as Status tokens.
 export const accountNameToken = new ExternalTokenizer((input) => {
@@ -403,7 +493,6 @@ export const accountNameToken = new ExternalTokenizer((input) => {
   while (true) {
     let ch = input.peek(i)
     if (isEOL(ch)) break
-    if (ch === CH_SEMI) break
     if (ch === CH_TAB) break
 
     if (ch === CH_SPACE) {
@@ -411,7 +500,7 @@ export const accountNameToken = new ExternalTokenizer((input) => {
       while (input.peek(j) === CH_SPACE) j++
       if (j - i >= 2) break
       let after = input.peek(j)
-      if (after === CH_SEMI || after === CH_TAB || isEOL(after)) break
+      if (after === CH_TAB || isEOL(after)) break
       i = j
       continue
     }

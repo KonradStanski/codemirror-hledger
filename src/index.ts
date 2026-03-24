@@ -22,6 +22,7 @@ export const hledgerLanguage = LRLanguage.define({
         // Directive keywords
         AccountKeyword: t.keyword,
         CommodityKeyword: t.keyword,
+        FormatKeyword: t.keyword,
         IncludeKeyword: t.keyword,
         AliasKeyword: t.keyword,
         PayeeKeyword: t.keyword,
@@ -34,14 +35,23 @@ export const hledgerLanguage = LRLanguage.define({
         ApplyYearKeyword: t.keyword,
         ApplyTagKeyword: t.keyword,
         ApplyFixedKeyword: t.keyword,
+        AssertKeyword: t.keyword,
+        CaptureKeyword: t.keyword,
+        CheckKeyword: t.keyword,
+        DefineKeyword: t.keyword,
+        ExprKeyword: t.keyword,
+        ValueKeyword: t.keyword,
+        EvalKeyword: t.keyword,
         CommodityConversionKeyword: t.keyword,
         BucketKeyword: t.keyword,
         IgnoredPriceKeyword: t.keyword,
+        CommandFlagKeyword: t.keyword,
         EndKeyword: t.keyword,
 
         // Directive arguments
         DirectiveAccountName: t.variableName,
         DirectiveArgument: t.string,
+        DirectiveRest: t.string,
         IncludePath: t.string,
 
         // Posting nodes
@@ -51,9 +61,11 @@ export const hledgerLanguage = LRLanguage.define({
         Commodity: t.unit,
         CostOp: t.operator,
         BalanceOp: t.operator,
+        LotPriceFixed: t.operator,
         Status: t.keyword,
         CommentMark: t.lineComment,
         CommentBody: t.lineComment,
+        LotDateBody: t.meta,
         "( )": t.paren,
       }),
       indentNodeProp.add({
@@ -121,6 +133,13 @@ const directiveCompletions: Completion[] = [
   {label: "end apply tag", type: "keyword"},
   {label: "apply fixed", type: "keyword"},
   {label: "end apply fixed", type: "keyword"},
+  {label: "assert", type: "keyword"},
+  {label: "capture", type: "keyword"},
+  {label: "check", type: "keyword"},
+  {label: "define", type: "keyword"},
+  {label: "expr", type: "keyword"},
+  {label: "value", type: "keyword"},
+  {label: "eval", type: "keyword"},
   {label: "bucket", type: "keyword"},
 ]
 

@@ -79,11 +79,11 @@ Each posting is an indented line within a transaction (or periodic/auto posting 
     [virtual:account]  AMOUNT   ; balanced virtual posting
 ```
 
-### AST: `Posting > PostingIndent, Status?, AccountName, Amount?, CostAnnotation?, BalanceAssertion?, InlineComment?`
+### AST: `Posting > PostingIndent, Status?, AccountName, Amount?, PostingAnnotation*, InlineComment?`
 
 ### Account Names
 
-Hierarchical, colon-separated. May contain single spaces within segments. Terminated by double-space, tab, semicolon, or end of line.
+Hierarchical, colon-separated. May contain single spaces within segments. In journal syntax they may also contain semicolons. Account names are terminated by double-space, tab, or end of line.
 
 ```
     assets:bank:td:checking_4506  $100
@@ -141,6 +141,29 @@ Assert the account balance after a posting:
 
 ### AST: `BalanceAssertion > BalanceOp, Sign?, Commodity?, Sign?, Number, Commodity?`
 
+### Lot Prices
+
+Lot price annotations may be unit-cost (`{...}`) or total-cost (`{{...}}`) and can be fixed with `=`.
+
+```
+    assets:stock  1 A {2 B}
+    assets:stock  1 A {=2 B}
+    assets:stock  1 A {{2 B}}
+    assets:stock  1 A {{ = 2 B }}
+```
+
+### AST: `LotPrice > "{"/"{{", LotPriceFixed?, Sign?, Commodity?, Sign?, Number, Commodity?, "}"/"}}" `
+
+### Lot Dates
+
+Lot dates are square-bracket annotations attached to postings:
+
+```
+    assets:stock  1 A [2000-01-01]
+```
+
+### AST: `LotDate > "[", LotDateBody, "]"`
+
 ---
 
 ## Periodic Transactions
@@ -181,30 +204,34 @@ Rules that automatically add postings to matching transactions, starting with `=
 ## Directives
 
 All directives start at the beginning of a line (no indentation). Each directive has a keyword node and an argument node.
+Legacy `!` / `@` directive prefixes are accepted and are styled as part of the directive keyword token.
 
 ### Account Declaration
 
-Declares an account name. May have indented sub-comments for metadata.
+Declares an account name. May have a same-line `;` comment and indented sub-comments for metadata.
 
 ```
 account assets:bank:checking
+account assets:cash  ; type:A
     ; type: Asset
     ; description: Main checking account
 ```
 
-**AST:** `AccountDirective > AccountKeyword, DirectiveAccountName, Newline, IndentedComment*`
+**AST:** `AccountDirective > AccountKeyword, DirectiveAccountName, InlineComment?, Newline, IndentedComment*`
 
 ### Commodity Declaration
 
-Declares a commodity with display format. May have indented subdirectives.
+Declares a commodity with display format. May have a same-line `;` comment and `format` subdirectives.
 
 ```
 commodity $1,000.00
+commodity $1.00 ; display format
 commodity EUR
-    ; format: EUR 1.000,00
+    format EUR 1.000,00
 ```
 
-**AST:** `CommodityDirective > CommodityKeyword, DirectiveArgument, Newline, IndentedComment*`
+**AST:** `CommodityDirective > CommodityKeyword, DirectiveArgument, InlineComment?, Newline, (CommodityFormatDirective | IndentedComment)*`
+**AST:** `CommodityFormatDirective > PostingIndent, FormatKeyword, DirectiveArgument, InlineComment?, Newline`
 
 ### Include
 
@@ -214,9 +241,10 @@ Includes another journal file. Supports glob patterns.
 include ./accounts.journal
 include transactions/*.journal
 include **/*.journal
+!include legacy.journal
 ```
 
-**AST:** `IncludeDirective > IncludeKeyword, IncludePath, Newline`
+**AST:** `IncludeDirective > IncludeKeyword, IncludePath, InlineComment?, Newline`
 
 ### Alias
 
@@ -234,9 +262,10 @@ Declares a payee name.
 
 ```
 payee Amazon
+payee Amazon ; merchant note
 ```
 
-**AST:** `PayeeDirective > PayeeKeyword, DirectiveArgument, Newline`
+**AST:** `PayeeDirective > PayeeKeyword, DirectiveArgument, InlineComment?, Newline, IndentedComment*`
 
 ### Tag
 
@@ -247,7 +276,7 @@ tag project
     ; description: Project tracking tag
 ```
 
-**AST:** `TagDirective > TagKeyword, DirectiveArgument, Newline, IndentedComment*`
+**AST:** `TagDirective > TagKeyword, DirectiveArgument, InlineComment?, Newline, IndentedComment*`
 
 ### Price (P)
 
@@ -334,7 +363,35 @@ apply fixed EUR $1.10
 ```
 
 **AST:** `ApplyAccountDirective`, `ApplyYearDirective`, `ApplyTagDirective`, `ApplyFixedDirective`
-Each: `*Keyword, DirectiveArgument, Newline`
+Each: `*Keyword, DirectiveArgument, InlineComment?, Newline`
+
+### Generic One-Line Directives
+
+These directives are parsed as a keyword plus the remaining text on the line:
+
+```
+assert balance
+capture invoice
+check assertions
+define foo ; semicolons remain part of the line here
+expr something
+value cost
+eval print(1)
+```
+
+**AST:** `AssertDirective`, `CaptureDirective`, `CheckDirective`, `DefineDirective`, `ExprDirective`, `ValueDirective`, `EvalDirective`
+Each: `*Keyword, DirectiveRest?, Newline`
+
+### Command Flag Directives
+
+Top-level `--flag` directives are parsed as journal directives rather than comments:
+
+```
+--strict
+--infer-costs
+```
+
+**AST:** `CommandFlagDirective > CommandFlagKeyword, DirectiveRest?, Newline`
 
 ### End Directives
 
@@ -349,7 +406,7 @@ end aliases
 end tag
 ```
 
-**AST:** `EndDirective > EndKeyword, DirectiveArgument?, Newline`
+**AST:** `EndDirective > EndKeyword, DirectiveArgument?, InlineComment?, Newline`
 
 ---
 
@@ -357,12 +414,13 @@ end tag
 
 ### Line Comments
 
-Start with `;`, `#`, or `*` at the beginning of a line:
+Start with `;`, `#`, or `*` at the beginning of a line. Top-level file comments may also be indented:
 
 ```
 ; This is a comment
 # This is also a comment
 * This is a comment too
+  ; This is also a top-level file comment
 ```
 
 **AST:** `LineComment`
@@ -409,8 +467,10 @@ Inside transactions or directives, indented lines starting with `;`:
 | `AutoHeader` | _(container)_ | Auto posting header |
 | `AutoMark` | `meta` | The `=` character |
 | `AutoQuery` | `string` | Auto posting query text |
+| `CommodityFormatDirective` | _(container)_ | Indented commodity `format` subdirective |
 | `AccountKeyword` | `keyword` | The word `account` |
 | `CommodityKeyword` | `keyword` | The word `commodity` |
+| `FormatKeyword` | `keyword` | The word `format` |
 | `IncludeKeyword` | `keyword` | The word `include` |
 | `AliasKeyword` | `keyword` | The word `alias` |
 | `PayeeKeyword` | `keyword` | The word `payee` |
@@ -423,12 +483,21 @@ Inside transactions or directives, indented lines starting with `;`:
 | `ApplyYearKeyword` | `keyword` | `apply year` |
 | `ApplyTagKeyword` | `keyword` | `apply tag` |
 | `ApplyFixedKeyword` | `keyword` | `apply fixed` |
+| `AssertKeyword` | `keyword` | `assert` |
+| `CaptureKeyword` | `keyword` | `capture` |
+| `CheckKeyword` | `keyword` | `check` |
+| `DefineKeyword` | `keyword` | `define` |
+| `ExprKeyword` | `keyword` | `expr` |
+| `ValueKeyword` | `keyword` | `value` |
+| `EvalKeyword` | `keyword` | `eval` |
 | `CommodityConversionKeyword` | `keyword` | The letter `C` |
 | `BucketKeyword` | `keyword` | `A` or `bucket` |
 | `IgnoredPriceKeyword` | `keyword` | The letter `N` |
+| `CommandFlagKeyword` | `keyword` | The `--` directive prefix |
 | `EndKeyword` | `keyword` | `end ...` variants |
 | `DirectiveAccountName` | `variableName` | Account name in account directive |
 | `DirectiveArgument` | `string` | Generic directive argument text |
+| `DirectiveRest` | `string` | Rest-of-line directive text without comment splitting |
 | `IncludePath` | `string` | File path/glob in include directive |
 | `AccountName` | `variableName` | Account name in postings |
 | `Amount` | _(container)_ | Amount with commodity and number |
@@ -437,6 +506,10 @@ Inside transactions or directives, indented lines starting with `;`:
 | `Commodity` | `unit` | Currency/commodity symbol |
 | `CostOp` | `operator` | `@` or `@@` |
 | `BalanceOp` | `operator` | `=`, `==`, `=*`, `==*` |
+| `LotPrice` | _(container)_ | Lot-price annotation (`{...}` / `{{...}}`) |
+| `LotDate` | _(container)_ | Lot-date annotation (`[DATE]`) |
+| `LotPriceFixed` | `operator` | `=` inside a fixed lot price |
+| `LotDateBody` | `meta` | Text inside `[DATE]` lot-date annotations |
 | `Status` | `keyword` | `*` or `!` |
 | `CommentMark` | `lineComment` | `;` in inline comments |
 | `CommentBody` | `lineComment` | Comment text content |
@@ -450,7 +523,9 @@ Inside transactions or directives, indented lines starting with `;`:
 ## Known Limitations
 
 - **Auto posting multiplier prefix** (`*0.5`, `*-1`): The `*` multiplier in auto posting rules conflicts with the `Status` marker. The grammar parses `*` as a status marker rather than a multiplier.
-- **Lot costs** (`{COST}`, `{{TOTAL_COST}}`): Not yet supported as distinct nodes.
-- **Lot dates** (`[DATE]` in posting modifiers): Not yet supported as distinct nodes.
 - **Secondary dates** (`DATE=DATE2`): Captured within `TxnDate` as a single token (not split into primary/secondary).
 - **Transaction codes** (`(CODE)`): Captured within `TxnDescription` but not as a separate sub-node.
+- **Comment tags and posting date tags** (`name: value`, `date:`, `date2:`, `[DATE=DATE2]` inside comments): These are semantic data in hledger, but they are not represented as dedicated syntax nodes by this grammar.
+- **Posting modifier ordering**: The grammar accepts posting annotations more permissively than hledger; some invalid orderings still require higher-level validation.
+- **Directive semantics**: Rules like commodity/`format` symbol matching and account-directive bracket rejection are not enforced syntactically.
+- **Python directives**: Multi-line `python` directives are not modeled yet.

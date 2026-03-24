@@ -223,6 +223,16 @@ describe("hledger parser", () => {
       assertCounts(summary, {AccountDirective: 1, IndentedComment: 2}, "account-subcomments")
     })
 
+    it("parses account directive with same-line comment", () => {
+      let input = "account assets:cash  ; type:A\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "account-inline-comment")
+      assertCounts(summary, {AccountDirective: 1, DirectiveAccountName: 1, InlineComment: 1, CommentMark: 1, CommentBody: 1}, "account-inline-comment")
+      assertNodeText(summary, "DirectiveAccountName", 0, "assets:cash", "account-inline-comment")
+      assertNodeText(summary, "CommentBody", 0, " type:A", "account-inline-comment")
+    })
+
     it("parses commodity directive with format argument", () => {
       let input = "commodity USD 1,000.00\n"
       let summary = inspectParse(input)
@@ -233,12 +243,24 @@ describe("hledger parser", () => {
       assertNodeText(summary, "DirectiveArgument", 0, "USD 1,000.00", "commodity-directive")
     })
 
+    it("parses commodity directive with same-line comment", () => {
+      let input = "commodity $1.00 ; display format\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "commodity-inline-comment")
+      assertCounts(summary, {CommodityDirective: 1, DirectiveArgument: 1, InlineComment: 1}, "commodity-inline-comment")
+      assertNodeText(summary, "DirectiveArgument", 0, "$1.00", "commodity-inline-comment")
+      assertNodeText(summary, "CommentBody", 0, " display format", "commodity-inline-comment")
+    })
+
     it("parses commodity directive with indented format subdirective", () => {
-      let input = "commodity EUR\n    ; format: EUR 1.000,00\n"
+      let input = "commodity EUR\n    format EUR 1.000,00\n"
       let summary = inspectParse(input)
 
       assertParsesWithoutErrors(summary, "commodity-subdir")
-      assertCounts(summary, {CommodityDirective: 1, IndentedComment: 1}, "commodity-subdir")
+      assertCounts(summary, {CommodityDirective: 1, CommodityFormatDirective: 1, FormatKeyword: 1, DirectiveArgument: 2}, "commodity-subdir")
+      assertNodeText(summary, "DirectiveArgument", 0, "EUR", "commodity-subdir")
+      assertNodeText(summary, "DirectiveArgument", 1, "EUR 1.000,00", "commodity-subdir")
     })
 
     it("parses include directive with path", () => {
@@ -251,12 +273,31 @@ describe("hledger parser", () => {
       assertNodeText(summary, "IncludePath", 0, "./accounts.journal", "include-directive")
     })
 
+    it("parses include directive with same-line comment", () => {
+      let input = "include ./accounts.journal ; main account list\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "include-inline-comment")
+      assertCounts(summary, {IncludeDirective: 1, IncludePath: 1, InlineComment: 1}, "include-inline-comment")
+      assertNodeText(summary, "IncludePath", 0, "./accounts.journal", "include-inline-comment")
+      assertNodeText(summary, "CommentBody", 0, " main account list", "include-inline-comment")
+    })
+
     it("parses include directive with glob", () => {
       let input = "include transactions/*.journal\n"
       let summary = inspectParse(input)
 
       assertParsesWithoutErrors(summary, "include-glob")
       assertNodeText(summary, "IncludePath", 0, "transactions/*.journal", "include-glob")
+    })
+
+    it("parses old-style !include directives", () => {
+      let input = "!include a.j\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "include-bang")
+      assertCounts(summary, {IncludeDirective: 1, IncludeKeyword: 1, IncludePath: 1}, "include-bang")
+      assertNodeText(summary, "IncludePath", 0, "a.j", "include-bang")
     })
 
     it("parses include directive with double-star glob", () => {
@@ -286,6 +327,16 @@ describe("hledger parser", () => {
       assertNodeText(summary, "DirectiveArgument", 0, "Amazon", "payee-directive")
     })
 
+    it("parses payee directive with same-line comment", () => {
+      let input = "payee Amazon ; merchant note\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "payee-inline-comment")
+      assertCounts(summary, {PayeeDirective: 1, DirectiveArgument: 1, InlineComment: 1}, "payee-inline-comment")
+      assertNodeText(summary, "DirectiveArgument", 0, "Amazon", "payee-inline-comment")
+      assertNodeText(summary, "CommentBody", 0, " merchant note", "payee-inline-comment")
+    })
+
     it("parses tag directive", () => {
       let input = "tag project\n"
       let summary = inspectParse(input)
@@ -300,6 +351,33 @@ describe("hledger parser", () => {
 
       assertParsesWithoutErrors(summary, "tag-subcomments")
       assertCounts(summary, {TagDirective: 1, IndentedComment: 1}, "tag-subcomments")
+    })
+
+    it("parses assert directives as rest-of-line directives", () => {
+      let input = "assert balance\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "assert-directive")
+      assertCounts(summary, {AssertDirective: 1, AssertKeyword: 1, DirectiveRest: 1}, "assert-directive")
+      assertNodeText(summary, "DirectiveRest", 0, "balance", "assert-directive")
+    })
+
+    it("parses define directives without treating semicolons as comments", () => {
+      let input = "define foo ; keep this text\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "define-directive")
+      assertCounts(summary, {DefineDirective: 1, DefineKeyword: 1, DirectiveRest: 1}, "define-directive")
+      assertNodeText(summary, "DirectiveRest", 0, "foo ; keep this text", "define-directive")
+    })
+
+    it("parses command line flag directives", () => {
+      let input = "--strict\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "command-flag-directive")
+      assertCounts(summary, {CommandFlagDirective: 1, CommandFlagKeyword: 1, DirectiveRest: 1}, "command-flag-directive")
+      assertNodeText(summary, "DirectiveRest", 0, "strict", "command-flag-directive")
     })
 
     it("parses decimal-mark directive", () => {
@@ -707,6 +785,39 @@ describe("hledger parser", () => {
         assertCounts(summary, {Commodity: 1, Amount: 1}, "unicode-currency")
       }
     })
+
+    it("parses lot price annotations", () => {
+      let input = "2024-01-15 test\n    assets:stock  1 A {2 B}\n    equity\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "lot-price")
+      assertCounts(summary, {LotPrice: 1, Amount: 1}, "lot-price")
+    })
+
+    it("parses fixed and total lot price annotations", () => {
+      let input = "2024-01-15 test\n    assets:stock  1 A {{ = 2 B }}\n    equity\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "lot-price-total-fixed")
+      assertCounts(summary, {LotPrice: 1, LotPriceFixed: 1}, "lot-price-total-fixed")
+    })
+
+    it("parses lot dates", () => {
+      let input = "2024-01-15 test\n    assets:stock  1 A [2000-01-01]\n    equity\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "lot-date")
+      assertCounts(summary, {LotDate: 1, LotDateBody: 1}, "lot-date")
+      assertNodeText(summary, "LotDateBody", 0, "2000-01-01", "lot-date")
+    })
+
+    it("parses lot price, lot date, and transaction price together", () => {
+      let input = "2024-01-15 test\n    assets:stock  1 A [2000-01-01] {2 B} @ 3 C\n    equity\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "lot-combo")
+      assertCounts(summary, {LotDate: 1, LotPrice: 1, CostAnnotation: 1}, "lot-combo")
+    })
   })
 
   // --- Comment tests ---
@@ -734,6 +845,24 @@ describe("hledger parser", () => {
 
       assertParsesWithoutErrors(summary, "star-comment")
       assertCounts(summary, {LineComment: 1}, "star-comment")
+    })
+
+    it("parses indented semicolon file comments", () => {
+      let summary = inspectParse("  ; indented comment\n")
+      assertParsesWithoutErrors(summary, "indented-semicolon-comment")
+      assertCounts(summary, {LineComment: 1}, "indented-semicolon-comment")
+    })
+
+    it("parses indented hash file comments", () => {
+      let summary = inspectParse("  # indented comment\n")
+      assertParsesWithoutErrors(summary, "indented-hash-comment")
+      assertCounts(summary, {LineComment: 1}, "indented-hash-comment")
+    })
+
+    it("parses indented star file comments", () => {
+      let summary = inspectParse("  * indented comment\n")
+      assertParsesWithoutErrors(summary, "indented-star-comment")
+      assertCounts(summary, {LineComment: 1}, "indented-star-comment")
     })
 
     it("parses block comment", () => {
@@ -824,6 +953,12 @@ describe("hledger parser", () => {
       assertCounts(summary, {BlankLine: 3}, "blank-lines")
     })
 
+    it("treats whitespace-only lines as blank lines", () => {
+      let summary = inspectParse("  \n\t\n")
+      assertParsesWithoutErrors(summary, "blank-lines-with-spaces")
+      assertCounts(summary, {BlankLine: 2}, "blank-lines-with-spaces")
+    })
+
     it("handles input without trailing newline", () => {
       let input = "account assets:bank"
       let summary = inspectParse(input)
@@ -890,6 +1025,14 @@ describe("hledger parser", () => {
 
       assertParsesWithoutErrors(summary, "double-space-sep")
       assertNodeText(summary, "AccountName", 0, "expenses:food", "double-space-sep")
+    })
+
+    it("allows semicolons inside account names", () => {
+      let input = "2024-01-15 test\n    assets:bank;sub  1\n    equity:opening\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "account-semicolon")
+      assertNodeText(summary, "AccountName", 0, "assets:bank;sub", "account-semicolon")
     })
   })
 
