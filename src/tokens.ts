@@ -315,11 +315,12 @@ export const directiveArgTokens = new ExternalTokenizer((input, stack) => {
   }
 
   if (stack.canShift(TxnDescription)) {
-    // Transaction description: everything to EOL (including status, code, description, inline comment)
+    // Transaction description: everything to EOL, stopping before a same-line ; comment
     let end = 0
     let lastNonSpace = -1
     while (!isEOL(input.peek(end))) {
       let c = input.peek(end)
+      if (c === CH_SEMI) break
       if (c !== CH_SPACE && c !== CH_TAB) lastNonSpace = end
       end++
     }

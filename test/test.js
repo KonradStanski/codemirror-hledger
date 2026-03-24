@@ -136,8 +136,8 @@ const fixtureCases = [
       AccountKeyword: 3,
       Transaction: 2,
       Posting: 4,
-      InlineComment: 1,
-      CommentBody: 1,
+      InlineComment: 2,
+      CommentBody: 2,
     },
   },
   {
@@ -556,6 +556,16 @@ describe("hledger parser", () => {
 
       assertParsesWithoutErrors(summary, "posting-comment")
       assertCounts(summary, {InlineComment: 1, CommentBody: 1}, "posting-comment")
+    })
+
+    it("parses same-line transaction comment separately from description", () => {
+      let input = "2024-01-15 test ; monthly: yes\n    expenses:food  $50\n    assets:bank\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "txn-inline-comment")
+      assertCounts(summary, {TxnDescription: 1, InlineComment: 1, CommentMark: 1, CommentBody: 1}, "txn-inline-comment")
+      assertNodeText(summary, "TxnDescription", 0, "test", "txn-inline-comment")
+      assertNodeText(summary, "CommentBody", 0, " monthly: yes", "txn-inline-comment")
     })
 
     it("parses transaction with indented comment lines", () => {
@@ -986,6 +996,12 @@ describe("hledger parser", () => {
     it("CommentIndent node for indented comments", () => {
       let summary = inspectParse("2024-01-15 t\n    ; a comment\n    a  $50\n    b\n")
       assertNodeText(summary, "CommentIndent", 0, "    ", "CommentIndent")
+    })
+
+    it("Indented comment splits CommentMark and CommentBody", () => {
+      let summary = inspectParse("2024-01-15 t\n    ; a comment\n    a  $50\n    b\n")
+      assertNodeText(summary, "CommentMark", 0, ";", "IndentedComment")
+      assertNodeText(summary, "CommentBody", 0, " a comment", "IndentedComment")
     })
 
     it("BlankLine node for empty lines", () => {

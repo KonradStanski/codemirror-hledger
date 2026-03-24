@@ -33,7 +33,7 @@ Transaction {
 }
 
 TxnHeader {
-  TxnDate TxnDescription?
+  TxnDate TxnDescription? InlineComment?
 }
 
 PeriodicTransaction {
@@ -151,10 +151,10 @@ BalanceAssertion {
 }
 
 IndentedComment {
-  CommentIndent CommentBody Newline
+  CommentIndent CommentMark CommentBody? Newline
 }
 
-InlineComment { CommentMark CommentBody }
+InlineComment { CommentMark CommentBody? }
 
 @external tokens headerTokens from "./tokens" {
   TxnDate,

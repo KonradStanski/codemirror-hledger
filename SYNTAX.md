@@ -30,7 +30,8 @@ DATE [STATUS] [DESCRIPTION] [; COMMENT]
 
 `TxnHeader` is split into sub-nodes:
 - **`TxnDate`** — the date (including optional secondary date with `=`)
-- **`TxnDescription`** — everything after the date (status, code, description text)
+- **`TxnDescription`** — the status/code/description text before any same-line `;` comment
+- **`InlineComment`** — an optional same-line transaction comment
 
 ### Dates
 
@@ -44,7 +45,7 @@ Supported separators: `-`, `/`, `.` (must be consistent within a date). Secondar
 1/15 Short date
 ```
 
-### AST: `TxnDate`, `TxnDescription`
+### AST: `TxnDate`, `TxnDescription`, `InlineComment`
 
 ### Status Markers
 
@@ -390,8 +391,8 @@ Inside transactions or directives, indented lines starting with `;`:
     assets:bank
 ```
 
-**AST:** `IndentedComment > CommentIndent, CommentBody, Newline`
-**AST:** `InlineComment > CommentMark, CommentBody`
+**AST:** `IndentedComment > CommentIndent, CommentMark, CommentBody?, Newline`
+**AST:** `InlineComment > CommentMark, CommentBody?`
 
 ---
 
@@ -439,6 +440,7 @@ Inside transactions or directives, indented lines starting with `;`:
 | `Status` | `keyword` | `*` or `!` |
 | `CommentMark` | `lineComment` | `;` in inline comments |
 | `CommentBody` | `lineComment` | Comment text content |
+| `InlineComment` | _(container)_ | Same-line transaction or posting comment |
 | `LineComment` | `lineComment` | Full line comment |
 | `BlockComment` | `blockComment` | Block comment |
 | `BlankLine` | _(none)_ | Empty line |
