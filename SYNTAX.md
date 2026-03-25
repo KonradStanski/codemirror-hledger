@@ -284,9 +284,17 @@ Declares a market price for a commodity.
 
 ```
 P 2024-01-01 EUR $1.10
+P 2010/09/29 13:50:15 AAPL $5.240
+P 2018-12-28 "IE00B4L5Y983" 43.11000000 "EUR"
+P 2015/08/15 EEEE 41.66
 ```
 
-**AST:** `PriceDirective > PriceKeyword, DirectiveArgument, Newline`
+`P` directives use a structured body:
+- `PriceDate` captures a date or datetime (`DATE` or `DATE HH:MM[:SS][+/-ZZZZ]`)
+- `PriceCommodity` captures the base commodity symbol
+- `PriceAmount` wraps the quoted amount, reusing the normal `Amount` grammar
+
+**AST:** `PriceDirective > PriceKeyword, PriceDate, PriceCommodity, PriceAmount, InlineComment?, Newline`
 
 ### Default Commodity (D)
 
@@ -476,6 +484,9 @@ Inside transactions or directives, indented lines starting with `;`:
 | `PayeeKeyword` | `keyword` | The word `payee` |
 | `TagKeyword` | `keyword` | The word `tag` |
 | `PriceKeyword` | `keyword` | The letter `P` |
+| `PriceDate` | `meta` | Market price date or datetime |
+| `PriceCommodity` | _(container)_ | Base commodity in a `P` directive |
+| `PriceAmount` | _(container)_ | Quoted amount in a `P` directive |
 | `DefaultCommodityKeyword` | `keyword` | The letter `D` |
 | `YearKeyword` | `keyword` | `Y` or `year` |
 | `DecimalMarkKeyword` | `keyword` | `decimal-mark` |

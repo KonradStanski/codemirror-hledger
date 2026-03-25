@@ -43,6 +43,7 @@ import {hledgerLanguage} from "codemirror-lang-hledger"
 - **Auto posting rules**: `= query`
 - **Directives**: `account`, `commodity`, `payee`, `tag`, `include`, `alias`, `end aliases`, `decimal-mark`, `apply account`, `apply year`, `apply tag`, `apply fixed`, `end ...`, `assert`, `capture`, `check`, `define`, `expr`, `value`, `eval`, `P` (market price), `D` (default commodity), `Y`/`year`, `C`, `A`/`bucket`, `N`, and command-line `--flag` directives
 - **Directive details**: same-line `;` comments on account/commodity/include/payee/tag directives, commodity `format` subdirectives, and legacy `!` / `@` directive prefixes
+- **Price directives**: `P` directives expose structured `PriceDate`, `PriceCommodity`, and `PriceAmount` nodes instead of flattening the body into one generic argument string
 - **Comments**: line comments (`;`, `#`, `*`), indented top-level file comments, and block comments (`comment`...`end comment`)
 - **Date formats**: `YYYY-MM-DD`, `YYYY/MM/DD`, `YYYY.MM.DD`
 

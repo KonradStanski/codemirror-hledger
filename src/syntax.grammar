@@ -91,7 +91,15 @@ TagDirective {
 }
 
 PriceDirective {
-  PriceKeyword DirectiveArgument InlineComment? Newline
+  PriceKeyword PriceDate PriceCommodity PriceAmount InlineComment? Newline
+}
+
+PriceCommodity {
+  Commodity
+}
+
+PriceAmount {
+  Amount
 }
 
 DefaultCommodityDirective {
@@ -257,6 +265,7 @@ InlineComment { CommentMark CommentBody? }
 }
 
 @external tokens directiveArgTokens from "./tokens" {
+  PriceDate,
   DirectiveAccountName,
   DirectiveArgument,
   DirectiveRest,

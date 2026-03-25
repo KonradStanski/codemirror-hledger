@@ -407,9 +407,92 @@ describe("hledger parser", () => {
       let summary = inspectParse(input)
 
       assertParsesWithoutErrors(summary, "price-directive")
-      assertCounts(summary, {PriceDirective: 1, PriceKeyword: 1, DirectiveArgument: 1}, "price-directive")
+      assertCounts(
+        summary,
+        {
+          PriceDirective: 1,
+          PriceKeyword: 1,
+          PriceDate: 1,
+          PriceCommodity: 1,
+          PriceAmount: 1,
+          Amount: 1,
+          Commodity: 2,
+          Number: 1,
+        },
+        "price-directive"
+      )
       assertNodeText(summary, "PriceKeyword", 0, "P", "price-directive")
-      assertNodeText(summary, "DirectiveArgument", 0, "2024-01-15 EUR $1.08", "price-directive")
+      assertNodeText(summary, "PriceDate", 0, "2024-01-15", "price-directive")
+      assertNodeText(summary, "PriceCommodity", 0, "EUR", "price-directive")
+      assertNodeText(summary, "PriceAmount", 0, "$1.08", "price-directive")
+    })
+
+    it("parses P (price) directive with datetime and same-line comment", () => {
+      let input = "P 2026-03-24 13:50:15-0800 USD 1.47 CAD ; provider:ecb\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "price-directive-datetime")
+      assertCounts(
+        summary,
+        {
+          PriceDirective: 1,
+          PriceDate: 1,
+          PriceCommodity: 1,
+          PriceAmount: 1,
+          Amount: 1,
+          Commodity: 2,
+          Number: 1,
+          InlineComment: 1,
+        },
+        "price-directive-datetime"
+      )
+      assertNodeText(summary, "PriceDate", 0, "2026-03-24 13:50:15-0800", "price-directive-datetime")
+      assertNodeText(summary, "PriceCommodity", 0, "USD", "price-directive-datetime")
+      assertNodeText(summary, "PriceAmount", 0, "1.47 CAD", "price-directive-datetime")
+      assertNodeText(summary, "CommentBody", 0, " provider:ecb", "price-directive-datetime")
+    })
+
+    it("parses P (price) directive with quoted commodities", () => {
+      let input = "P 2018-12-28 \"IE00B4L5Y983\" 43.11000000 \"EUR\"\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "price-directive-quoted")
+      assertCounts(
+        summary,
+        {
+          PriceDirective: 1,
+          PriceDate: 1,
+          PriceCommodity: 1,
+          PriceAmount: 1,
+          Amount: 1,
+          Commodity: 2,
+          Number: 1,
+        },
+        "price-directive-quoted"
+      )
+      assertNodeText(summary, "PriceCommodity", 0, "\"IE00B4L5Y983\"", "price-directive-quoted")
+      assertNodeText(summary, "PriceAmount", 0, "43.11000000 \"EUR\"", "price-directive-quoted")
+    })
+
+    it("parses P (price) directive with a no-symbol amount", () => {
+      let input = "P 2015/08/15 EEEE 41.66\n"
+      let summary = inspectParse(input)
+
+      assertParsesWithoutErrors(summary, "price-directive-nosymbol")
+      assertCounts(
+        summary,
+        {
+          PriceDirective: 1,
+          PriceDate: 1,
+          PriceCommodity: 1,
+          PriceAmount: 1,
+          Amount: 1,
+          Commodity: 1,
+          Number: 1,
+        },
+        "price-directive-nosymbol"
+      )
+      assertNodeText(summary, "PriceAmount", 0, "41.66", "price-directive-nosymbol")
     })
 
     it("parses D (default commodity) directive", () => {

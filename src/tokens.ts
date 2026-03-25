@@ -11,7 +11,7 @@ import {
   ExprKeyword, ValueKeyword, EvalKeyword,
   CommodityConversionKeyword, BucketKeyword, IgnoredPriceKeyword,
   CommandFlagKeyword, EndKeyword,
-  DirectiveAccountName, DirectiveArgument, DirectiveRest, IncludePath, TxnDescription,
+  PriceDate, DirectiveAccountName, DirectiveArgument, DirectiveRest, IncludePath, TxnDescription,
   PeriodicExpression, AutoQuery
 } from "./syntax.grammar.terms"
 
@@ -102,6 +102,49 @@ function matchDate(input: InputStream, offset: number): number {
   }
 
   return i - offset
+}
+
+function matchTwoDigitNumber(input: InputStream, offset: number): number {
+  let d1 = input.peek(offset)
+  let d2 = input.peek(offset + 1)
+  if (!isDigit(d1) || !isDigit(d2)) return -1
+  return (d1 - 48) * 10 + (d2 - 48)
+}
+
+function matchPriceDate(input: InputStream, offset: number): number {
+  let dateLen = matchDate(input, offset)
+  if (dateLen < 0) return -1
+
+  let i = offset + dateLen
+  let j = i
+  while (input.peek(j) === CH_SPACE || input.peek(j) === CH_TAB) j++
+
+  if (j === i) return dateLen
+
+  let hour = matchTwoDigitNumber(input, j)
+  if (hour < 0 || hour > 23) return dateLen
+  if (input.peek(j + 2) !== 58 /* : */) return dateLen
+
+  let minute = matchTwoDigitNumber(input, j + 3)
+  if (minute < 0 || minute > 59) return dateLen
+
+  j += 5
+
+  if (input.peek(j) === 58 /* : */) {
+    let second = matchTwoDigitNumber(input, j + 1)
+    if (second < 0 || second > 59) return dateLen
+    j += 3
+  }
+
+  let tzSign = input.peek(j)
+  if (tzSign === 43 /* + */ || tzSign === 45 /* - */) {
+    for (let k = 1; k <= 4; k++) {
+      if (!isDigit(input.peek(j + k))) return dateLen
+    }
+    j += 5
+  }
+
+  return j - offset
 }
 
 function matchKeyword(input: InputStream, offset: number, kw: string): boolean {
@@ -336,6 +379,14 @@ export const directiveArgTokens = new ExternalTokenizer((input, stack) => {
     }
     if (lastNonSpace >= 0) {
       input.acceptToken(DirectiveAccountName, lastNonSpace + 1)
+    }
+    return
+  }
+
+  if (stack.canShift(PriceDate)) {
+    let end = matchPriceDate(input, 0)
+    if (end > 0) {
+      input.acceptToken(PriceDate, end)
     }
     return
   }
